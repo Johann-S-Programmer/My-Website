@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>3D Shooter Game</title>
+	<style>
+	body {
+		margin: 0;
+		overflow: hidden;
+		font-family: Arial, sans-serif;
+	}
+
+	#gameCanvas {
+		display: block;
+		width: 100%;
+		height: 100vh;
+	}
+
+	/* 1. HUD Top Row: Flexbox makes feedback follow score */
+	#hud-top {
+		position: absolute;
+		top: 20px;
+		left: 20px;
+		display: flex;
+		align-items: center;
+		gap: 25px;
+		pointer-events: none;
+	}
+
+	#score {
+		color: white;
+		font-size: 24px;
+		text-shadow: 2px 2px 4px black;
+		white-space: nowrap;
+	}
+
+	#feedback {
+		color: yellow;
+		font-size: 20px;
+		text-shadow: 2px 2px 4px black;
+		font-weight: bold;
+	}
+
+	/* 2. Instructions + Powerup Stack */
+	#instructions-container {
+		position: absolute;
+		top: 60px;
+		left: 20px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		pointer-events: none;
+	}
+
+	#instructions {
+		color: white;
+		font-size: 16px;
+		text-shadow: 2px 2px 4px black;
+	}
+
+	#powerup {
+		color: #00ffff;
+		font-size: 18px;
+		font-weight: bold;
+		text-shadow: 2px 2px 4px black;
+	}
+
+	/* 3. Menus */
+	#gameOver,
+	#pauseMenu {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		color: white;
+		font-size: 48px;
+		text-shadow: 3px 3px 6px black;
+		display: none;
+		text-align: center;
+	}
+
+	#restartBtn,
+	#resumeBtn {
+		font-size: 24px;
+		padding: 15px 30px;
+		margin-top: 20px;
+		cursor: pointer;
+		color: white;
+		border: none;
+		border-radius: 10px;
+	}
+
+	#restartBtn {
+		background: #ff4444;
+	}
+
+	#resumeBtn {
+		background: #44ff44;
+	}
+	</style>
+</head>
+
+<body>
+	<canvas id="gameCanvas"></canvas>
+	<div id="hud-top">
+		<div id="score">Score: 0</div>
+		<div id="feedback"></div>
+	</div>
+	<div id="instructions-container">
+		<div id="instructions">Press SPACEBAR to shoot at the yellow line!</div>
+		<div id="powerup"></div>
+	</div>
+	<div id="gameOver">
+		<div>GAME OVER</div>
+		<div id="finalScore"></div>
+		<button id="restartBtn">RESTART</button>
+	</div>
+	<div id="pauseMenu">
+		<div>PAUSED</div>
+		<button id="resumeBtn">RESUME (ESC)</button>
+	</div>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+	<script>
+	// Setup
+	const canvas = document.getElementById('gameCanvas');
+	const scene = new THREE.Scene();
+	const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+	const renderer = new THREE.WebGLRenderer({
+		canvas: canvas
+	});
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.shadowMap.enabled = true;
+	// Sky color
+	const loader = new THREE.TextureLoader();
+	scene.background = loader.load('data:image/jpeg;base64,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');
+	// Add ground
+	const groundGeometry = new THREE.PlaneGeometry(100, 100);
+	//const loader = new THREE.TextureLoader();
+	const groundTexture = loader.load('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTf4DCKCdjqh4bR4n1J1hKZpeKH9avFrDXQDA&s');
+	groundTexture.repeat.set(1, 1);
+	const groundMaterial = new THREE.MeshLambertMaterial({
+		map: groundTexture
+	});
+	const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+	ground.rotation.x = -Math.PI / 2;
+	ground.receiveShadow = true;
+	scene.add(ground);
+	// Add yellow boundary line (thicker)
+	const lineGeometry = new THREE.RingGeometry(9.5, 10.5, 64);
+	const lineMaterial = new THREE.MeshBasicMaterial({
+		color: 0xffff00,
+		side: THREE.DoubleSide
+	});
+	const boundaryLine = new THREE.Mesh(lineGeometry, lineMaterial);
+	boundaryLine.rotation.x = -Math.PI / 2;
+	boundaryLine.position.y = 0.05;
+	scene.add(boundaryLine);
+	// Add light
+	const light = new THREE.DirectionalLight(0xffffff, 1);
+	light.position.set(5, 10, 5);
+	light.castShadow = true;
+	scene.add(light);
+	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+	scene.add(ambientLight);
+	// Camera position
+	camera.position.z = 5;
+	camera.position.y = 2;
+	// Create gun
+	const gunGroup = new THREE.Group();
+	const barrelGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.8);
+	const barrelMaterial = new THREE.MeshLambertMaterial({
+		color: 0x333333
+	});
+	const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+	barrel.position.z = 0.4; // Point forward instead of backward
+	const handleGeometry = new THREE.BoxGeometry(0.1, 0.3, 0.2);
+	const handleMaterial = new THREE.MeshLambertMaterial({
+		color: 0x555555
+	});
+	const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+	handle.position.y = -0.15;
+	handle.position.z = -0.1; // Move handle behind barrel
+	gunGroup.add(barrel);
+	gunGroup.add(handle);
+	gunGroup.position.set(0.3, -0.3, -1);
+	camera.add(gunGroup);
+	scene.add(camera);
+	// Game variables
+	let isPowerUpActive = false;
+	let score = 0;
+	let lives = 10
+	let maxScore = 0;
+	let enemies = [];
+	let bullets = [];
+	let canShoot = true;
+	let gameRunning = true;
+	let gamePaused = false;
+	let spawnInterval = 2000;
+	let spawnTimer = null;
+	let enemySpeed = 0.08;
+	const TARGET_DISTANCE = 10;
+	let isSlowMo = false;
+	let enemiesDefeated = 0;
+	const KILLS_REQUIRED = 15;
+	const enemyTextures = [ 'https://images.pexels.com/photos/13578248/pexels-photo-13578248.jpeg', 'https://images.pexels.com/photos/7767506/pexels-photo-7767506.jpeg', 'https://images.pexels.com/photos/35849577/pexels-photo-35849577.jpeg'];
+	const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+	const enemyMaterials = enemyTextures.map(url => {
+		return new THREE.MeshLambertMaterial({
+			map: loader.load(url)
+		});
+	});
+	// Enemy class
+	function createEnemy() {
+		if(!gameRunning) return;
+		const randomMaterial = enemyMaterials[Math.floor(Math.random() * enemyMaterials.length)];
+		const enemy = new THREE.Mesh(geometry, randomMaterial);
+		// Random spawn position in 30 degree cone in front of camera
+		const coneAngle = 30 * (Math.PI / 180);
+		const randomAngle = (Math.random() - 0.5) * coneAngle;
+		const angle = -Math.PI / 2 + randomAngle;
+		const distance = 30;
+		enemy.position.x = Math.cos(angle) * distance;
+		enemy.position.y = 0.5;
+		enemy.position.z = Math.sin(angle) * distance;
+		enemy.castShadow = true;
+		enemy.alive = true;
+		scene.add(enemy);
+		enemies.push(enemy);
+	}
+	// Spawn system with increasing difficulty based on score
+	function startSpawning() {
+		if(spawnTimer) clearInterval(spawnTimer);
+		// Calculate difficulty based on score
+		const difficulty = Math.floor(score / 20);
+		spawnInterval = Math.max(100, 2000 - difficulty * 150);
+		enemySpeed = 0.08 + difficulty * 0.05;
+		spawnTimer = setInterval(() => {
+			createEnemy();
+			startSpawning(); // Recalculate based on current score
+		}, spawnInterval);
+	}
+	// Gun recoil animation
+	function recoilGun() {
+		gunGroup.position.z = -0.8;
+		setTimeout(() => {
+			gunGroup.position.z = -1;
+		}, 100);
+	}
+	// Game over
+	function endGame() {
+		gameRunning = false;
+		if(spawnTimer) clearInterval(spawnTimer);
+		document.getElementById('gameOver').style.display = 'block';
+		document.getElementById('finalScore').textContent = 'Max Score Reached: ' + maxScore;
+	}
+	// Restart game
+	document.getElementById('restartBtn').addEventListener('click', () => {
+		location.reload();
+	});
+	// Pause/Resume game
+	function togglePause() {
+		if(!gameRunning) return;
+		gamePaused = !gamePaused;
+		if(gamePaused) {
+			document.getElementById('pauseMenu').style.display = 'block';
+			if(spawnTimer) clearInterval(spawnTimer);
+		} else {
+			document.getElementById('pauseMenu').style.display = 'none';
+			startSpawning();
+		}
+	}
+	document.getElementById('resumeBtn').addEventListener('click', togglePause);
+
+	function activatePowerUp() {
+		isSlowMo = true;
+		// Target the specific powerup ID under instructions
+		document.getElementById('powerup').textContent = "POWER UP: TIME SLOWED!";
+		setTimeout(() => {
+			isSlowMo = false;
+			document.getElementById('powerup').textContent = ""; // Clear only powerup text
+		}, 5000);
+	}
+	// Shoot function
+	function shoot() {
+		if(!canShoot || !gameRunning || gamePaused) return;
+		canShoot = false;
+		setTimeout(() => {
+			canShoot = true;
+		}, 1);
+		const bulletGeo = new THREE.SphereGeometry(0.1);
+		const bulletMat = new THREE.MeshBasicMaterial({
+			color: 0xffffff
+		});
+		recoilGun();
+		// Find closest enemy to player
+		let closestEnemy = null;
+		let closestDistance = Infinity;
+		enemies.forEach(enemy => {
+			if(enemy.alive) {
+				const dist = enemy.position.distanceTo(camera.position);
+				if(dist < closestDistance) {
+					closestDistance = dist;
+					closestEnemy = enemy;
+				}
+			}
+		});
+		if(closestEnemy) {
+			closestEnemy.alive = false;
+			const targetToRemove = closestEnemy;
+			// 3. Delayed logic using the stored reference
+			setTimeout(() => {
+				scene.remove(targetToRemove);
+				// Clean up geometry and material to save browser memory
+				targetToRemove.geometry.dispose();
+				targetToRemove.material.dispose();
+			}, 250); // 0.25 seconds
+			enemiesDefeated++;
+			if(enemiesDefeated >= KILLS_REQUIRED) {
+				activatePowerUp();
+				enemiesDefeated = 0; // Reset the counter
+			}
+			enemies = enemies.filter(e => e !== closestEnemy);
+			// Calculate score based on distance from target line
+			const distanceFromTarget = Math.abs(closestDistance - TARGET_DISTANCE);
+			// +30 points at perfect center, decreasing to +1 at far distances
+			let points = Math.max(1, Math.round(30 - distanceFromTarget * 3));
+			let feedback = '';
+			if(distanceFromTarget < 0.3) {
+				feedback = 'PERFECT! +' + points;
+			} else if(distanceFromTarget < 1) {
+				feedback = 'Great! +' + points;
+			} else if(distanceFromTarget < 2) {
+				feedback = 'Good +' + points;
+			} else {
+				feedback = 'Hit +' + points;
+			}
+			const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+			bullet.position.copy(camera.position);
+			// Calculate direction
+			const direction = new THREE.Vector3(0, 0, -1); // Default: Straight ahead
+			if(closestEnemy) {
+				direction.subVectors(closestEnemy.position, camera.position).normalize();
+			}
+			direction.applyQuaternion(camera.quaternion); // Align with camera rotation
+			bullet.velocity = direction.multiplyScalar(0.8); // Set speed to 0.8
+			scene.add(bullet);
+			bullets.push(bullet);
+			score += points;
+			if(score > maxScore) {
+				maxScore = score;
+			}
+			document.getElementById('score').textContent = 'Score: ' + score + ' | Lives: ' + lives;
+			document.getElementById('feedback').textContent = feedback;
+			setTimeout(() => {
+				document.getElementById('feedback').textContent = '';
+			}, 1000);
+		}
+	}
+	// Keyboard input
+	document.addEventListener('keydown', (e) => {
+		if(e.code === 'Space') {
+			e.preventDefault();
+			shoot();
+		}
+		if(e.code === 'Escape') {
+			e.preventDefault();
+			togglePause();
+		}
+		if(e.code === 'ShiftLeft') {
+			isSlowMo = !isSlowMo;
+			document.getElementById('feedback').textContent = isSlowMo ? 'TIME SLOWED' : 'TIME NORMAL';
+		}
+	});
+	// Start spawning enemies
+	startSpawning();
+	// Animation loop
+	function animate() {
+		requestAnimationFrame(animate);
+		if(!gameRunning || gamePaused) {
+			renderer.render(scene, camera);
+			return;
+		}
+		bullets.forEach((bullet, index) => {
+			bullet.position.add(bullet.velocity);
+			//Remove bullets that travel too far to save memory
+			if(bullet.position.distanceTo(camera.position) > 50) {
+				scene.remove(bullet);
+				bullets.splice(index, 1);
+			}
+		});
+		// Find closest enemy for gun aiming
+		let closestEnemy = null;
+		let closestDistance = Infinity;
+		enemies.forEach(enemy => {
+			if(enemy.alive) {
+				const dist = enemy.position.distanceTo(camera.position);
+				if(dist < closestDistance) {
+					closestDistance = dist;
+					closestEnemy = enemy;
+				}
+			}
+		});
+		// Point gun at closest enemy
+		if(closestEnemy) {
+			const targetPos = closestEnemy.position.clone();
+			const cameraWorldPos = new THREE.Vector3();
+			camera.getWorldPosition(cameraWorldPos);
+			// Calculate direction vector from camera to target
+			const direction = new THREE.Vector3();
+			direction.subVectors(targetPos, cameraWorldPos);
+			// Calculate angles
+			const horizontalAngle = Math.atan2(direction.x, direction.z);
+			const verticalAngle = Math.atan2(direction.y, Math.sqrt(direction.x * direction.x + direction.z * direction.z));
+			// Apply rotation to gun (positive vertical angle means point down)
+			gunGroup.rotation.y = horizontalAngle;
+			gunGroup.rotation.x = verticalAngle;
+		}
+		// Move enemies toward player
+		enemies.forEach(enemy => {
+			if(enemy.alive) {
+				const direction = new THREE.Vector3();
+				direction.subVectors(camera.position, enemy.position);
+				direction.normalize();
+				const currentSpeed = isSlowMo ? enemySpeed * 0.2 : enemySpeed;
+				enemy.position.x += direction.x * currentSpeed;
+				enemy.position.z += direction.z * currentSpeed;
+				// Update enemy color based on distance from target line
+				const distFromPlayer = enemy.position.distanceTo(camera.position);
+				const distFromLine = Math.abs(distFromPlayer - TARGET_DISTANCE);
+				// Color transitions from red -> yellow (at line) -> red
+				// Maximum yellow when within 2 units of the line
+				const yellowness = Math.max(0, 1 - distFromLine / 3);
+				const red = 1;
+				const green = yellowness;
+				const blue = 0;
+				// Check if enemy hit the player
+				if(enemy.position.distanceTo(camera.position) < 2) {
+					scene.remove(enemy);
+					enemies = enemies.filter(e => e !== enemy);
+					lives -= 1;
+					document.getElementById('score').textContent = 'Score: ' + score + ' | Lives: ' + lives;
+					document.getElementById('score').textContent = 'Score: ' + score + ' | Lives: ' + lives;
+					document.getElementById('feedback').textContent = 'Youre HIT! -1 life';
+					document.getElementById('feedback').style.color = 'red';
+					setTimeout(() => {
+						document.getElementById('feedback').textContent = '';
+						document.getElementById('feedback').style.color = 'yellow';
+					}, 1000);
+					// Check for game over
+					if(lives <= 0) {
+						endGame();
+					}
+				}
+			}
+		});
+		renderer.render(scene, camera);
+	}
+	// Handle window resize
+	window.addEventListener('resize', () => {
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize(window.innerWidth, window.innerHeight);
+	});
+	// Start game
+	animate();
+	</script>
+</body>
+
+</html>
